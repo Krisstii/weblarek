@@ -9,6 +9,8 @@ export interface IApi {
   ): Promise<T>;
 }
 
+export type TPayment = "card" | "cash" | "";
+
 export interface IProduct {
   id: string;
   description: string;
@@ -35,7 +37,7 @@ export interface IOrderResult {
   id: string;
 }
 
-export interface IProduct {
+export interface IProductsResponse {
   total: number;
-  item: IProduct[];
+  items: IProduct[];
 }

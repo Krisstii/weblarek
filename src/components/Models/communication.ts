@@ -1,5 +1,5 @@
-import { IApi } from "../../../types/index";
-import { IOrder, IOrderResult, IProduct } from "../../../types/index";
+import { IApi } from "../../types/index";
+import { IOrder, IOrderResult, IProductsResponse } from "../../types/index";
 
 export class Communication {
   private api: IApi;
@@ -8,8 +8,8 @@ export class Communication {
     this.api = api;
   }
 
-  async getProductList(): Promise<IProduct> {
-    return this.api.get<IProduct>("/product/");
+  async getProductList(): Promise<IProductsResponse> {
+    return this.api.get<IProductsResponse>("/product/");
   }
 
   async postProduct(order: IOrder): Promise<IOrderResult> {
