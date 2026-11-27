@@ -1,0 +1,44 @@
+import { Component } from "../../base/Component";
+import { ensureElement } from "../../../utils/utils";
+import { IEvents } from "../../base/Events";
+export interface Iform {
+  error: string;
+}
+
+export abstract class Form<T extends Iform> extends Component<T> {
+  protected formButton: HTMLButtonElement;
+  protected formError: HTMLElement;
+
+  constructor(
+    container: HTMLElement,
+    protected events: IEvents,
+  ) {
+    super(container);
+
+    this.formButton = ensureElement<HTMLButtonElement>(
+      ".modal__actions button",
+      this.container,
+    );
+    this.formError = ensureElement<HTMLElement>(
+      ".form__errors",
+      this.container,
+    );
+
+    this.container.addEventListener("submit", (e: Event) => {
+      e.preventDefault();
+      this.events.emit(`${this.container.getAttribute("name")}:submit`);
+    });
+  }
+
+  set error(value: string) {
+    this.formError.textContent = value;
+  }
+
+  set buttonStatus(value: boolean) {
+    this.formButton.disabled = value;
+  }
+
+  protected inputChange(field: keyof T, value: string) {
+    this.events.emit("form:change", { field, value });
+  }
+}

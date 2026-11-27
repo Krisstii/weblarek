@@ -1,75 +1,203 @@
 import "./scss/styles.scss";
-import { ProductCatalog } from "./components/base/Models/ProductCatalog";
+import { EventEmitter } from "./components/base/Events";
+import { Api } from "./components/base/Api";
 import { Cart } from "./components/Models/Cart";
 import { Buyer } from "./components/Models/Buyer";
 import { Communication } from "./components/Models/communication";
-import { Api } from "./components/base/Api";
-import { IProductsResponse } from "./types/index";
+import { ProductCatalog } from "./components/Models/ProductCatalog";
+import { Basket } from "./components/View/Basket";
+import { CardBasket } from "./components/View/CardBasket";
+import { CardCatalog } from "./components/View/CardCatalog";
+import { CardFull } from "./components/View/CardFull";
+import { Contact } from "./components/View/Contact";
+import { Gallery } from "./components/View/Gallery";
+import { Header } from "./components/View/Header";
+import { Modal } from "./components/View/Modal";
+import { Payment } from "./components/View/Payment";
+import { Success } from "./components/View/Success";
 import { API_URL } from "./utils/constants";
-import { apiProducts } from "./utils/data";
+import { cloneTemplate, ensureElement } from "./utils/utils";
+import { IBuyer, IOrder, IProductsResponse } from "./types";
 
-console.log("тестирование ProductCatalog");
+const api = new Communication(new Api(API_URL));
+const events = new EventEmitter();
+const products = new ProductCatalog(events);
+const gallery = new Gallery(ensureElement(".gallery"));
+const modal = new Modal(ensureElement("#modal-container"), events);
+const cart = new Cart(events);
+const header = new Header(ensureElement(".header"), events);
+const basketShop = new Basket(cloneTemplate("#basket"), events);
+const buyer = new Buyer(events);
+const orderForm = new Payment(cloneTemplate("#order"), events);
+const contactFrom = new Contact(cloneTemplate("#contacts"), events);
+const success = new Success(cloneTemplate("#success"), events);
+const preview = new CardFull(cloneTemplate("#card-preview"), events);
 
-const productsModel = new ProductCatalog();
-
-productsModel.setProduct(apiProducts.items);
-console.log("всего товаров:", productsModel.getProduct().length);
-console.log("массив товаров из каталога: ", productsModel.getProduct());
-
-const firstProductId = apiProducts.items[0].id;
-const foundProduct = productsModel.getProductById(firstProductId);
-console.log(`Поиск товара по id ${firstProductId}:`, foundProduct);
-
-productsModel.setSelectProduct(foundProduct || null);
-console.log(
-  "Выбранный товар для подробного просмотра:",
-  productsModel.getSelectedProduct(),
-);
-
-console.log("тестирование Cart");
-
-const CartModel = new Cart();
-const item1 = productsModel.getProduct()[0];
-const item2 = productsModel.getProduct()[1];
-
-CartModel.addProduct(item1);
-CartModel.addProduct(item2);
-
-console.log("общая стоимость корзины:", CartModel.getTotalPrice());
-
-console.log("тестирование Buyer");
-
-const buyerModel = new Buyer();
-
-buyerModel.saveBuyerData({ email: "tfghd@gmail.com" });
-console.log("сохранён только имейл");
-console.log("что сохранено:", buyerModel.getBuyerData());
-
-console.log("Метод isValidDat:", buyerModel.isValidData());
-
-buyerModel.saveBuyerData({ payment: "card" });
-console.log("способ оплаты добавлен");
-console.log("Метод isValidDat:", buyerModel.isValidData());
-
-const api = new Api(API_URL);
-
-const larekApi = new Communication(api);
-
-larekApi
+api
   .getProductList()
   .then((result: IProductsResponse) => {
-    console.log("Всего товаров:", result.total);
-
-    productsModel.setProduct(result.items);
-
-    console.log("Товары сохранены:", productsModel.getProduct());
+    console.log("Данные получены");
+    products.setProduct(result.items);
   })
   .catch((error) => {
-    console.error("Ошибка при загрузке товаров:", error);
+    console.error(error);
   });
 
-const cart = new Cart();
-console.log("\nколичество:", cart.getCountProduct());
+events.on("catalog:change", () => {
+  const items = products.getProduct().map((item) => {
+    const cardCatalog = new CardCatalog(cloneTemplate("#card-catalog"), events);
+    return cardCatalog.render(item);
+  });
+  gallery.render({ catalog: items });
+});
 
-const buyer = new Buyer();
-console.log("Валидация:", buyer.isValidData());
+events.on("card:click", (event: { id: string }) => {
+  const product = products.getProductById(event.id);
+  if (product) {
+    products.setSelectProduct(product);
+  }
+});
+
+events.on("card:open", () => {
+  const product = products.getSelectedProduct();
+
+  if (!product) {
+    return;
+  }
+
+  let textButton = "";
+  if (product.price === null) {
+    textButton = "Недоступно";
+  } else {
+    textButton = cart.hasProductInCart(product.id)
+      ? "Удалить из корзины"
+      : "Купить";
+  }
+  preview.button = textButton;
+
+  modal.openModal();
+  modal.render({ content: preview.render(product) });
+});
+
+events.on("buy:products", () => {
+  const product = products.getSelectedProduct();
+
+  if (!product) {
+    return;
+  }
+
+  if (cart.hasProductInCart(product.id)) {
+    cart.removeProduct(product);
+  } else {
+    cart.addProduct(product);
+  }
+
+  modal.closeModal();
+});
+
+events.on("basket:open", () => {
+  header.counter = cart.getCountProduct();
+  const basketShopItems = cart.getItems().map((item, index) => {
+    const productBasket = new CardBasket(cloneTemplate("#card-basket"), events);
+
+    productBasket.index = index + 1;
+    productBasket.title = item.title;
+    productBasket.price = item.price;
+
+    return productBasket.render(item);
+  });
+
+  basketShop.basket = basketShopItems;
+  basketShop.total = cart.getTotalPrice();
+
+  modal.openModal();
+  modal.render({ content: basketShop.render() });
+});
+
+events.on("basket:remove", (event: { id: string }) => {
+  const product = products.getProductById(event.id);
+
+  if (!product) {
+    return;
+  }
+
+  cart.removeProduct(product);
+});
+
+events.on("basket:change", () => {
+  header.counter = cart.getCountProduct();
+  const basketShopItems = cart.getItems().map((item, index) => {
+    const productBasket = new CardBasket(cloneTemplate("#card-basket"), events);
+
+    productBasket.index = index + 1;
+    productBasket.title = item.title;
+    productBasket.price = item.price;
+
+    return productBasket.render(item);
+  });
+
+  basketShop.basket = basketShopItems;
+  basketShop.total = cart.getTotalPrice();
+});
+
+events.on("basket:success", () => {
+  orderForm.error = "";
+
+  modal.render({ content: orderForm.render() });
+});
+
+events.on("form:change", (event: { field: keyof IBuyer; value: string }) => {
+  buyer.saveBuyerData({ [event.field]: event.value });
+});
+
+events.on("buyer:change", () => {
+  const errors = buyer.isValidData();
+
+  const data = buyer.getBuyerData();
+  if (data) {
+    orderForm.payment = data.payment;
+    orderForm.address = data.address || "";
+    contactFrom.email = data.email || "";
+    contactFrom.phone = data.phone || "";
+  }
+
+  const orderErrors = [];
+  if (errors.payment) orderErrors.push(errors.payment);
+  if (errors.address) orderErrors.push(errors.address);
+  orderForm.error = orderErrors.join(", ");
+  orderForm.buttonStatus = orderErrors.length > 0;
+
+  const contactErrors = [];
+  if (errors.email) contactErrors.push(errors.email);
+  if (errors.phone) contactErrors.push(errors.phone);
+  contactFrom.error = contactErrors.join(", ");
+  contactFrom.buttonStatus = contactErrors.length > 0;
+});
+
+events.on("order:submit", () => {
+  contactFrom.error = "";
+  modal.render({ content: contactFrom.render() });
+});
+
+events.on("contacts:submit", () => {
+  const buyerData = buyer.getBuyerData();
+  const details: IOrder = {
+    ...buyerData,
+    total: cart.getTotalPrice(),
+    items: cart.getItems().map((item) => item.id),
+  };
+
+  api
+    .postProduct(details)
+    .then(() => {
+      cart.clearCart();
+      success.total = details.total;
+    })
+    .catch((error) => console.log("Error", error));
+
+  modal.render({ content: success.render() });
+});
+
+events.on("success:close", () => {
+  modal.closeModal();
+});

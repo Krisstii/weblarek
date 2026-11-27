@@ -1,8 +1,9 @@
 import { IProduct } from "../../types";
+import { IEvents } from "../base/Events";
 export class Cart {
   private items: IProduct[] = [];
 
-  constructor() {
+  constructor(protected events: IEvents) {
     this.items = [];
   }
 
@@ -14,10 +15,12 @@ export class Cart {
     if (!this.hasProductInCart(product.id)) {
       this.items.push(product);
     }
+    this.events.emit("basket:change");
   }
 
   removeProduct(product: IProduct): void {
     this.items = this.items.filter((item) => item.id != product.id);
+    this.events.emit("basket:change");
   }
 
   clearCart(): void {
